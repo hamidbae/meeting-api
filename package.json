@@ -4,7 +4,8 @@
   "description": "api pembokingan ruang meeting",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "nodemon app",
+    "postinstall": "opencollective-postinstall"
   },
   "author": "",
   "license": "ISC",
@@ -18,6 +19,7 @@
     "node-cron": "^2.0.3",
     "nodemailer": "^6.4.18",
     "nodemailer-mailgun-transport": "^2.0.2",
+    "opencollective-postinstall": "^2.0.3",
     "request": "^2.88.2",
     "uuid": "^8.3.2",
     "validator": "^13.5.2"
