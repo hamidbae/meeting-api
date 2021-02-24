@@ -7,6 +7,9 @@
     "start": "nodemon app",
     "postinstall": "opencollective-postinstall || exit 0"
   },
+  "collective": {
+    "url": "https://opencollective.com/webpack"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
