@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "nodemon app",
-    "postinstall": "opencollective-postinstall"
+    "postinstall": "opencollective-postinstall || exit 0"
   },
   "author": "",
   "license": "ISC",
