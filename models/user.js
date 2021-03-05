@@ -14,6 +14,10 @@ const userSchema = new Schema({
         type: String,
         required: true
     },
+    cloudinary_id: {
+        type: String,
+        required: true
+    },
     meetingLists: [{
         type: Schema.Types.ObjectId,
         ref: 'Room'

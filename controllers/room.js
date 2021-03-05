@@ -1,6 +1,6 @@
 const Room = require('../models/room')
 const User = require('../models/user')
-const sendMail = require('../mail/mail')
+const sendMail = require('../utils/mail')
 const cron = require('node-cron')
 
 exports.getRooms = (req, res, next) => {
@@ -10,92 +10,107 @@ exports.getRooms = (req, res, next) => {
     })
 }
 
-exports.createRoom = (req, res, next) => {
-    const { topic, roomName, capacity, time } = req.body
-    const meetSplit = time.split(/[-/ ,:]/)
-    const meetTime = new Date(...meetSplit)
-    const room = new Room({
-        topic: topic,
-        roomName: roomName,
-        capacity: capacity,
-        time: meetTime
-    })
-    room.save()
-    .then(result => {
-        res.status(201).json({ message: 'a room was created', room: result})
-    })
-    .catch(err => {
+exports.createRoom = async (req, res, next) => {
+    try{
+        const { topic, roomName, capacity, time } = req.body
+
+        let timeSplit = time.split(/[-/ ,:]/)
+        timeSplit[1]--
+        const meetTime = new Date(...timeSplit)
+
+        const room = new Room({
+            topic: topic,
+            roomName: roomName,
+            capacity: capacity,
+            time: meetTime
+        })
+    
+        await room.save()
+        
+        res.status(201).json({ message: 'a room was created', room: room})
+    } catch(err) {
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
+    }
 }
 
-exports.getRoom = (req, res, next) => {
-    Room.findById(req.params.roomId)
-    .then(result => {
-        res.status(200).send(result)
-    })
-}
-
-exports.updateRoom = (req, res, next) => {
-    const { topic, roomName, capacity, time } = req.body
-    const meetSplit = time.split(/[-/ ,:]/)
-    const meetTime = new Date(...meetSplit)
-    Room.findById(req.params.roomId)
-    .then(room => {
+exports.getRoom = async (req, res, next) => {
+    try{
+        const room = await Room.findById(req.params.roomId)
         if(!room) {
             const error = new Error('Room not found')
             error.statusCode = 404
             throw error
         }
-        room.topic = topic
-        room.roomName = roomName
-        room.capacity = capacity
-        room.time = meetTime
-        return room.save()
-    })
-    .then(roomUpdated => {
-        res.status(201).json({ message: 'Room was updated', room: roomUpdated})
-    })
-    .catch(err => {
+        res.status(200).send(room)
+    } catch(err) {
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
-    
+    }
 }
 
-exports.deleteRoom = (req, res, next) => {
-    const roomId = req.params.roomId
-    Room.findById(roomId)
-    .then(room => {
+exports.updateRoom = async (req, res, next) => {
+    try {
+        const { topic, roomName, capacity, time } = req.body
+    
+        let room = await Room.findById(req.params.roomId)
+        if(!room) {
+            const error = new Error('Room not found')
+            error.statusCode = 404
+            throw error
+        }
+        
+        // format time yyyy/mm/dd
+        let meetTime
+        if(time){
+            let timeSplit = time.split(/[-/ ,:]/)
+            timeSplit[1]--
+            meetTime = new Date(...timeSplit)
+        }else{
+            meetTime = room.time
+        }
+    
+        room.topic = topic ? topic : room.topic
+        room.roomName = roomName ? roomName : room.roomName
+        room.capacity = capacity ? capacity : room.capacity
+        room.time = meetTime
+    
+        await room.save()
+    
+        res.status(201).json({ message: 'Room was updated', room: room })
+    } catch(err) {
+        if (!err.statusCode) {
+            err.statusCode = 500
+        }
+        next(err)
+    }
+}
+
+exports.deleteRoom = async (req, res, next) => {
+    try{
+        const room = Room.findById(req.params.roomId)
         if(!room){
             const error = new Error('Room not found')
             error.statusCode = 404
             throw error
         }
-        return Room.findByIdAndRemove(roomId)
-    })
-    .then(deletedRoom => {
+        room.remove()
         res.status(200).json({ message: 'a room was deleted' })
-    })
-    .catch(err => {
+    } catch(err) {
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
+    }
 }
 
-exports.addParticipant = (req, res, next) => {
-    const roomId = req.params.roomId
-    let userRoom
-
-    Room.findById(roomId)
-    .then(room => {
+exports.addParticipant = async (req, res, next) => {
+    try{
+        let room = await Room.findById(req.params.roomId)
         if (!room) {
             const error = new Error('Room not found')
             error.statusCode = 404
@@ -111,41 +126,39 @@ exports.addParticipant = (req, res, next) => {
             error.statusCode = 404
             throw error
         }
-        userRoom = room
+    
+        let user = await User.findById(req.userId)
+        
         room.participants.push(req.userId)
-        return room.save()
-    })
-    .then(roomUpdated => {
-        return User.findById(req.userId)
-    })
-    .then(user => {
-        user.meetingLists.push(userRoom)
-        return user.save()
-    })
-    .then(result => {
+        user.meetingLists.push(room)
+        await room.save()
+        await user.save()
+    
+        // send email to user
         let subject = 'book a meet'
-        let text = `terimakasih telah memesan meeting dengan topik ${userRoom.topic}`
-
-        sendMail(result.email, subject, text, function(err, data) {
+        let text = `terimakasih telah memesan meeting dengan topik ${room.topic}`
+    
+        sendMail(user.email, subject, text, function(err, data) {
             if (err) {
                 const error = new Error('Email not sent')
                 error.statusCode = 404
                 throw error
             }
         })
-
-        const cornDate = new Date(userRoom.time)
-
-        const month = cornDate.getMonth()
+    
+        // schedule email sending
+        const cornDate = new Date(room.time)
+    
+        const month = cornDate.getMonth() + 1
         const date = cornDate.getDate()
-        const hours = cornDate.getHours()
-        const minutes = cornDate.getMinutes()
 
-        const task = cron.schedule(`0 1 ${date} ${month} *`, () => {
+        console.log(date, month)
+    
+        const task = cron.schedule(`13 11 ${date} ${month} *`, () => {
             subject = 'meeting reminder'
-            text = `a meeting with topic ${userRoom.topic} will be held this day`
-
-            sendMail(result.email, subject, text, function(err, data) {
+            text = `a meeting with topic ${room.topic} will be held this day`
+    
+            sendMail(user.email, subject, text, function(err, data) {
                 if (err) {
                     const error = new Error('Email not sent')
                     error.statusCode = 404
@@ -154,27 +167,29 @@ exports.addParticipant = (req, res, next) => {
             })
             task.destroy()
         })
-
-        res.status(201).json({message: 'room added to user', userId: result._id})
-    })
-    .catch(err => {
+    
+        res.status(201).json({ message: 'room added to user', room: room })
+    }catch(err) {
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
-    
+    }
 }
 
-exports.userCheckIn = (req, res, next) => {
-    const userId = req.params.userId
-    const roomId = req.params.roomId
-    let userRoom
+exports.userCheckIn = async (req, res, next) => {
+    try{
 
-    Room.findById(roomId)
-    .then(room => {
+        const { userId, roomId } = req.params
+        let room = await Room.findById(roomId)
         if (!room) {
             const error = new Error('Room not found')
+            error.statusCode = 404
+            throw error
+        }
+        let user = await User.findById(userId)
+        if (!user) {
+            const error = new Error('User not found')
             error.statusCode = 404
             throw error
         }
@@ -184,22 +199,18 @@ exports.userCheckIn = (req, res, next) => {
             throw error
         }
         if(room.userCheckIn.includes(userId)){
-            const error = new Error('User already in')
+            const error = new Error('User already checked in')
             error.statusCode = 404
             throw error
         }
-        userRoom = room
-        
+    
         room.userCheckIn.push(userId)
-        return room.save()
-    })
-    .then(result => {
-        return User.findById(userId)
-    })
-    .then(user => {
+        await room.save()
+    
+        // send email check in
         let subject = 'meeting attended'
-        let text = `thanks for joining our meeting with topic ${userRoom.topic}`
-
+        let text = `thanks for joining our meeting with topic ${room.topic}`
+    
         sendMail(user.email, subject, text, function(err, data) {
             if (err) {
                 const error = new Error('Email not sent')
@@ -207,12 +218,12 @@ exports.userCheckIn = (req, res, next) => {
                 throw error
             }
         })
-        res.status(201).json({ message: 'Participant checked' })
-    })
-    .catch(err => {
+    
+        res.status(201).json({ message: 'Participant checked in' })
+    } catch(err) {
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
+    }
 }

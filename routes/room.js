@@ -1,22 +1,17 @@
-const express = require('express')
-const router = express.Router()
 const adminAuth = require('../middleware/adminAuth')
 const userAuth = require('../middleware/userAuth')
-
 const roomController = require('../controllers/room')
 
+const express = require('express')
+const router = express.Router()
+
 router.get('/', roomController.getRooms)
-
-router.post('/', adminAuth, roomController.createRoom)
-
 router.get('/:roomId', roomController.getRoom)
+router.post('/create', adminAuth, roomController.createRoom)
+router.put('/update/:roomId', adminAuth, roomController.updateRoom)
+router.delete('delete/:roomId', adminAuth, roomController.deleteRoom)
 
-router.get('/add-participant/:roomId', userAuth, roomController.addParticipant)
-
-router.put('/:roomId', adminAuth, roomController.updateRoom)
-
+router.post('/add-participant/:roomId', userAuth, roomController.addParticipant)
 router.put('/checkin/:roomId/:userId', adminAuth, roomController.userCheckIn)
-
-router.delete('/:roomId', adminAuth, roomController.deleteRoom)
 
 module.exports = router

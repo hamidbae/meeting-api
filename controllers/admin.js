@@ -1,21 +1,37 @@
 const Admin = require('../models/admin')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const validator = require('validator')
 
-exports.createAdmin = (req, res, next) => {
-    const {name, email, password} = req.body
-    
-    bcrypt
-    .hash(password, 12)
-    .then(hashedPw => {
+exports.createAdmin = async (req, res, next) => {
+    try{
+        const {name, email, password} = req.body
+        const isRegistered = await Admin.findOne({ email: email })
+        console.log(isRegistered)
+        if(isRegistered){
+            const error = new Error('This email has been registered')
+            error.code = 301
+            throw error
+        }
+        if(!validator.isEmail(email)){
+            const error = new Error('Email not valid')
+            error.code = 301
+            throw error  
+        }
+        if(password.length < 6){
+            const error = new Error('Min password length 6')
+            error.code = 301
+            throw error
+        }
+        const hashedPw = await bcrypt.hash(password, 12)
         const admin = new Admin({
             name: name,
             email: email,
             password: hashedPw
         })
-        return admin.save()
-    })
-    .then(admin => {
+
+        await admin.save()
+    
         res.status(201).json({ 
             message: 'admin created', 
             admin: {
@@ -24,71 +40,63 @@ exports.createAdmin = (req, res, next) => {
                 email: admin.email
             } 
         })
-    })
-    .catch(err => {
+    }catch(err){
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
+    }
 }
 
-exports.updateAdmin = (req, res, next) => {
-    const {name, email, password} = req.body
-    bcrypt
-    .hash(password, 12)
-    .then(hashedPw => {
-        Admin.findById(req.params.adminId)
-        .then(admin => {
-            if(!admin) {
-                const error = new Error('Admin not found')
-                error.statusCode = 404
-                throw error
-            }
-            admin.name = name
-            admin.email = email
-            admin.password = hashedPw
-            return admin.save()
-        })
-        .then(adminUpdated => {
-            res.status(201).json({ 
-                message: 'Admin was updated', 
-                admin: {
-                    _id: adminUpdated._id,
-                    name: adminUpdated.name,
-                    email: adminUpdated.email
-                }
-            })
-        })
-    })
-    .catch(err => {
-        if (!err.statusCode) {
-            err.statusCode = 500
+exports.updateAdmin = async (req, res, next) => {
+    try{
+        let {name, email, password} = req.body
+        if(!validator.isEmail(email)){
+            const error = new Error('Email not valid')
+            error.code = 301
+            throw error  
         }
-        next(err)
-    })
-}
-
-exports.deleteAdmin = (req, res, next) => {
-    const adminId = req.params.adminId
-    Admin.findById(adminId)
-    .then(admin => {
-        if(!admin){
-            const error = new Error('Admin not found')
-            error.statusCode = 404
+        if(password.length < 6){
+            const error = new Error('Min password length 6')
+            error.code = 301
             throw error
         }
-        return Admin.findByIdAndRemove(adminId)
-    })
-    .then(deletedAdmin => {
-        res.status(200).json({ message: 'admin deleted' })
-    })
-    .catch(err => {
+
+        const admin = await Admin.findById(req.adminId)
+
+        admin.hashedPw = password ? await bcrypt.hash(password, 12) : admin.password
+        admin.name = name ? name : admin.name
+        admin.email = email ? email: admin.email
+
+        await admin.save()
+    
+        res.status(201).json({ 
+            message: 'admin updated', 
+            admin: {
+                _id: admin._id,
+                name: admin.name,
+                email: admin.email
+            } 
+        })
+    }catch(err){
         if (!err.statusCode) {
             err.statusCode = 500
         }
         next(err)
-    })
+    }
+}
+
+exports.deleteAdmin = async (req, res, next) => {
+    try{
+        const admin = Admin.findById(req.adminId)
+        await admin.remove()
+        res.status(200).json({ message: 'admin deleted' })
+    } catch(err) {
+        if (!err.statusCode) {
+            err.statusCode = 500
+        }
+        next(err)
+    }
 }
 
 exports.adminLogin = (req, res, next) => {
